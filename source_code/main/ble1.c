@@ -15,59 +15,62 @@
 #define BT_BD_ADDR_STR         "%02x:%02x:%02x:%02x:%02x:%02x"
 #define BT_BD_ADDR_HEX(addr)   addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]
 
-
+static const char *bt_event_type_to_string(uint32_t eventType);
 static void gap_callback_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param);
 static const char *btsig_gap_type(uint32_t gap_type);
 
-#define tag "ble1"
+#define tag "Scanning"
 
 
-static uint32_t convertU16ToU32(uint16_t inShortA, uint16_t inShortB) 
-{
-	return inShortA<< 16 | inShortB;
-}
 
 
-static uint16_t convertU8ToU16(uint8_t inByteA, uint8_t inByteB)
-{
+
+static uint16_t convertU8ToU16(uint8_t inByteA, uint8_t inByteB) {
+	
 	return inByteA<<8 | inByteB;
+
 }
 
 
-// https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.service.health_thermometer.xml
-static double decode1809(uint8_t  *payload)
-{
+
+static double decode1809(uint8_t  *payload) {
+
 	return ((float)(payload[4]<<16 | payload[3]<<8 | payload[2])) / 100.0;
+
 }
 
-static uint8_t decode180f(uint8_t  *payload)
-{
+
+
+static uint8_t decode180f(uint8_t  *payload) {
+
 	return payload[2];
+
 }
 
-static void dump_16bituuid(uint8_t  *payload,uint8_t length)
-{
-	//Find UUID from the two first bytes
+
+
+static void dump_16bituuid(uint8_t  *payload,uint8_t length) {
+	
 	uint16_t uuid =0;
 
 	uuid = convertU8ToU16 (payload[1],payload[0]);
 	ESP_LOGD(tag,"Dump16 UUID %04X, len %d", uuid,length);
 
 
-	length -=2; //Reduce with header size
+	length -=2;
 
-	// A list of all GATT Services is here https://www.bluetooth.com/specifications/gatt/services
+	
 	switch(uuid)
 	{
 		
-		case 0x1809:  // Health Thermometer
-			if (length >=4) //Validate input payload length;
+		case 0x1809: 
+			if (length >=4) 
 			{				
 				ESP_LOGI(tag,"@ 0x1809 Temperature %f", decode1809(payload));
 			}
 			
 			break;
-		case 0x180f : //Battery Service (mandatory)
+		case 0x180f : 
 			if (length >=1)
 			{ 
 				ESP_LOGI(tag,"@ 0x180F Battery %d %%", decode180f(payload));
@@ -75,29 +78,11 @@ static void dump_16bituuid(uint8_t  *payload,uint8_t length)
 			break;
 
 		default:
-			ESP_LOGI(tag,"@ 16 BIT UUID 0x%04X - Packet decoding for thtis type not implemented",uuid); // Read the Bluetooth spec and implement it
+			ESP_LOGI(tag,"@ 16 BIT UUID 0x%04X - Packet decoding for thtis type not implemented",uuid); 
 			break;
 	}
 }
 
-
-void bin_to_strhex(unsigned char *bin, unsigned int binsz, char **result)
-{
-  char          hex_str[]= "0123456789abcdef";
-  unsigned int  i;
-
-  *result = (char *)malloc(binsz * 2 + 1);
-  (*result)[binsz * 2] = 0;
-
-  if (!binsz)
-    return;
-
-  for (i = 0; i < binsz; i++)
-    {
-      (*result)[i * 2 + 0] = hex_str[(bin[i] >> 4) & 0x0F];
-      (*result)[i * 2 + 1] = hex_str[(bin[i]     ) & 0x0F];
-    }  
-}
 
 static uint8_t dump_adv_payload(uint8_t *payload) 
 {
@@ -106,7 +91,7 @@ static uint8_t dump_adv_payload(uint8_t *payload)
 	uint8_t sizeConsumed = 0;
 	int finished = 0;
 	uint8_t total_length=0;
-
+	
 
 	while(!finished) {
 		length = *payload;
@@ -114,7 +99,6 @@ static uint8_t dump_adv_payload(uint8_t *payload)
 		if (length != 0) {
 			ad_type = *payload;
 			
-			ESP_LOGI(tag, "# Payload type: 0x%.2x (%s)", ad_type, btsig_gap_type(ad_type)h);			
 
 
 		
@@ -125,14 +109,14 @@ static uint8_t dump_adv_payload(uint8_t *payload)
 					break;
 
 				case 0x09:  
-					ESP_LOGI(tag, "# Complete local name: %.*s", length, payload);			
+					ESP_LOGI(tag, "Complete local name: %.*s", length, payload);			
 					break;
 
 				default:
 					break;
 			}
 
-		
+			
 			int i;
 			int size = length / sizeof(char);
 			char *hex_str = (char*) calloc(3 * size,1);
@@ -151,18 +135,24 @@ static uint8_t dump_adv_payload(uint8_t *payload)
 					
 					char ch = source[i];
 					
-					//quick fix since isalpha had unexpected results
+					
 					int ichar = ((int) ch) & 0xFF;
 					if ((ichar<32) || (ichar>126))
 					{
-						ch = '.';  // unprintable characters are represented as "."
+						ch = '.';  
 					}
 					
 					buf_ptr2 += sprintf(buf_ptr2, "%c", ch);					
 					
 				}
 
-				ESP_LOGI(tag,"* Payload: %s (%s)", hex_str, ascii_str);
+				
+				
+				
+				if (ad_type != 0x09){
+					ESP_LOGI(tag,"%s: %s (%s)", btsig_gap_type(ad_type), hex_str, ascii_str);
+				}
+
 			}
 			if (hex_str) free(hex_str);
 			hex_str=0;
@@ -178,9 +168,9 @@ static uint8_t dump_adv_payload(uint8_t *payload)
 		if (sizeConsumed >=31 || length == 0) {
 			finished = 1;
 		}
-	} // !finished
+	} 
 	return total_length;
-} // dump_adv_payload
+} 
 
 
 static void gap_callback_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
@@ -197,8 +187,7 @@ static void gap_callback_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_pa
 		{
 			ESP_LOGD(tag, "status: %d", p->scan_param_cmpl.status);
 		
-			// This procedure keep the device scanning the peer device which advertising on the air.
-			//the unit of the duration is second
+			
 			uint32_t duration = 30;
 			status = esp_ble_gap_start_scanning(duration); 
 			if (status != ESP_OK) 
@@ -210,7 +199,6 @@ static void gap_callback_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_pa
 
 		case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
 		{
-			//scan start complete event to indicate scan start successfully or failed
 			if (param->scan_start_cmpl.status != ESP_BT_STATUS_SUCCESS)
 			{
           	  ESP_LOGE(tag, "Scan start failed");
@@ -220,18 +208,14 @@ static void gap_callback_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_pa
 		
 		case ESP_GAP_BLE_SCAN_RESULT_EVT:
 		{	
-		
-			ESP_LOGI(tag, "Device address (bda): %02x:%02x:%02x:%02x:%02x:%02x", BT_BD_ADDR_HEX(p->scan_rst.bda));
+			printf ("\n\n\n");
+			ESP_LOGI(tag, "Device address: %02x:%02x:%02x:%02x:%02x:%02x", BT_BD_ADDR_HEX(p->scan_rst.bda));
 			
-
 			
 
 			if ( p->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_CMPL_EVT)
 			{
-				// Scan is done.
-
-				// The next 5 codelines automatically restarts the scan. You you only want
-				// one scan round, you can comment it.
+				
 				uint32_t duration = 30;
 				status = esp_ble_gap_start_scanning	(duration); 
 				if (status != ESP_OK) 
@@ -242,7 +226,13 @@ static void gap_callback_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_pa
 				return;
 			}
 
-			ESP_LOGI(tag, "");
+			
+			if (p->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_RES_EVT) {
+
+				dump_adv_payload(p->scan_rst.ble_adv);
+
+			}
+			
 			
 		}
 		break;
@@ -276,17 +266,45 @@ static void gap_callback_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_pa
 		default:
         break;
 	}
-} // gap_callback_handler
+} 
+
+
+
+
+static const char *bt_event_type_to_string(uint32_t eventType) {
+	switch(eventType) {
+		case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
+			return "ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT";
+		case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT:
+			return "ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT";
+		case ESP_GAP_BLE_SCAN_RESULT_EVT:
+			return "ESP_GAP_BLE_SCAN_RESULT_EVT";
+		case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT:
+			return "ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT";
+		default:
+			return "Unknown event type";
+	}
+} 
 
 static const char *btsig_gap_type(uint32_t gap_type) {
 	switch (gap_type)
 	{
+		case 0x02: return "Incomplete List of 16-bit Service Class UUIDs";
+		case 0x03: return "Complete List of 16-bit Service Class UUIDs";
+		case 0x04: return "Incomplete List of 32-bit Service Class UUIDs";
+		case 0x05: return "Complete List of 32-bit Service Class UUIDs";
+		case 0x06: return "Incomplete List of 128-bit Service Class UUIDs";
+		case 0x07: return "Complete List of 128-bit Service Class UUIDs";
+		case 0x08: return "Shortened Local Name";
 		case 0x09: return "Complete Local Name";
+		case 0x14: return "List of 16-bit Service Solicitation UUIDs";
+		case 0x1F: return "List of 32-bit Service Solicitation UUIDs";
+		case 0x15: return "List of 128-bit Service Solicitation UUIDs";
 		case 0x16: return "Service Data - 16-bit UUID";
 		case 0x20: return "Service Data - 32-bit UUID";
 		case 0x21: return "Service Data - 128-bit UUID";
 		case 0x1B: return "LE Bluetooth Device Address";
-		case 0xFF: return "Manufacturer Specific Data";
+		case 0xFF: return "Manufacturer Data";
 		
 		default: 
 			return "Unknown type";
@@ -300,8 +318,7 @@ esp_err_t register_ble_functionality(void)
 	
 	ESP_LOGI(tag, "Register GAP callback");
 	
-	// This function is called to occur gap event, such as scan result.
-	//register the scan callback function to the gap module
+	
 	status = esp_ble_gap_register_callback(gap_callback_handler);
 	if (status != ESP_OK) 
 	{
@@ -320,7 +337,7 @@ esp_err_t register_ble_functionality(void)
 
 	ESP_LOGI(tag, "Set GAP scan parameters");
 	
-	// This function is called to set scan parameters.	
+	
 	status = esp_ble_gap_set_scan_params(&ble_scan_params);
 	if (status != ESP_OK) 
 	{
@@ -334,12 +351,11 @@ esp_err_t register_ble_functionality(void)
 	return ESP_OK ;
 }
 
-// Main start code running in its own Xtask
+
 void bt_task(void *ignore)
 {
 	esp_err_t status;
 
-	// Initialize NVS flash storage with layout given in the partition table
 	esp_err_t ret = nvs_flash_init();
 	if (ret == ESP_ERR_NVS_NO_FREE_PAGES) 
 	{
@@ -350,7 +366,6 @@ void bt_task(void *ignore)
 
 	ESP_LOGI(tag, "Enabling Bluetooth Controller");
 	
-	// Initialize BT controller to allocate task and other resource. 
 	esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 	if (esp_bt_controller_init(&bt_cfg) != ESP_OK) 
 	{
@@ -358,7 +373,6 @@ void bt_task(void *ignore)
 		goto end; 
 	}
 
-	// Enable BT controller
 	if (esp_bt_controller_enable(ESP_BT_MODE_BTDM) != ESP_OK) 
 	{
 		ESP_LOGE(tag, "Bluetooth controller enable failed");
@@ -369,7 +383,6 @@ void bt_task(void *ignore)
 
 	ESP_LOGI(tag, "Init Bluetooth stack");
 	
-	// Init and alloc the resource for bluetooth, must be prior to every bluetooth stuff
 	status = esp_bluedroid_init(); 
 	if (status != ESP_OK)
 	{ 
@@ -377,7 +390,6 @@ void bt_task(void *ignore)
 		goto end; 
 	} 
 	
-	// Enable bluetooth, must after esp_bluedroid_init()
 	status = esp_bluedroid_enable(); 
 	if (status != ESP_OK) 
 	{ 
@@ -405,4 +417,4 @@ end:
 	vTaskDelete(NULL);
 	
 	
-} // bt_task
+} 
